@@ -23,70 +23,34 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-type Email = {
-  id: string;
-  sender: string;
-  senderEmail: string;
-  subject: string;
-  preview: string;
-  time: string;
-  isRead: boolean;
-  intent: 'Sales' | 'Support' | 'Refund' | 'Complaint' | 'Billing' | 'General';
-  sentiment: 'Angry' | 'Neutral' | 'Positive' | 'Urgent';
-  priority: 'High' | 'Medium' | 'Low';
-  confidence: number;
-  suggestedReply: string;
-};
-
-const mockEmails: Email[] = [
-  {
-    id: '1',
-    sender: 'Sarah Miller',
-    senderEmail: 'sarah@example.com',
-    subject: 'Order #4521 - Urgent Refund Request',
-    preview: "I haven't received my package yet, and it's been 10 days since the expected delivery...",
-    time: '12m ago',
-    isRead: false,
-    intent: 'Refund',
-    sentiment: 'Angry',
-    priority: 'High',
-    confidence: 98,
-    suggestedReply: "Dear Sarah, I'm truly sorry for the delay with your Order #4521. I've checked the status and it appears to be stuck in transit. I'm processing a full refund for you now, and you'll receive a confirmation email shortly. As a token of our apology, we'd like to offer you a 20% discount on your next order."
-  },
-  {
-    id: '2',
-    sender: 'David Chen',
-    senderEmail: 'david@corp-solutions.com',
-    subject: 'Bulk Inquiry: Custom Enterprise Package',
-    preview: "We're looking to purchase about 500 units for our upcoming regional event. Do you have bulk discounts...",
-    time: '45m ago',
-    isRead: true,
-    intent: 'Sales',
-    sentiment: 'Positive',
-    priority: 'High',
-    confidence: 94,
-    suggestedReply: "Hi David, thanks for reaching out! We certainly offer bulk discounts for orders of this scale. I'll have our account manager build a custom proposal for your 500-unit requirement by the end of the day. Would you like to schedule a quick 10-minute call tomorrow morning to finalize the details?"
-  },
-  {
-    id: '3',
-    sender: 'Lisa Wang',
-    senderEmail: 'lisa.w@gmail.com',
-    subject: 'How to change billing cycle?',
-    preview: "I want to switch from monthly to annual billing to save on the subscription costs...",
-    time: '2h ago',
-    isRead: true,
-    intent: 'Billing',
-    sentiment: 'Neutral',
-    priority: 'Low',
-    confidence: 99,
-    suggestedReply: "Hi Lisa! Switching to annual billing is easy. You can do it directly in your Settings > Billing section. By switching now, you'll save approximately 15% on your total annual cost. Let me know if you'd like me to send you the direct link!"
-  }
-];
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiService } from '@/services/api';
 
 export default function InboxPage() {
-  const [selectedId, setSelectedId] = useState(mockEmails[0].id);
-  const selectedEmail = mockEmails.find(e => e.id === selectedId) || mockEmails[0];
+  const queryClient = useQueryClient();
+  const { data: emails = [], isLoading } = useQuery({
+    queryKey: ['emails'],
+    queryFn: async () => {
+      const { data } = await apiService.getEmails();
+      return data;
+    }
+  });
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedEmail = emails.find((e: any) => e.id === (selectedId || emails[0]?.id)) || emails[0];
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950/50">
+          <div className="flex flex-col items-center gap-6">
+              <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center text-primary animate-bounce shadow-xl shadow-indigo-500/10">
+                  <Mail className="w-8 h-8" />
+              </div>
+              <div className="text-sm font-bold text-muted-foreground uppercase tracking-[0.2em] animate-pulse">Syncing Intelligence...</div>
+          </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden bg-slate-50 dark:bg-slate-950/50">
@@ -118,13 +82,13 @@ export default function InboxPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {mockEmails.map((email) => (
+            {emails.map((email: any) => (
                 <div 
                     key={email.id} 
                     onClick={() => setSelectedId(email.id)}
                     className={cn(
                         "p-5 cursor-pointer border-b border-border/60 transition-all hover:bg-primary/5 group relative",
-                        selectedId === email.id ? "bg-primary/5 border-l-4 border-l-primary" : "border-l-4 border-l-transparent",
+                        (selectedId || emails[0]?.id) === email.id ? "bg-primary/5 border-l-4 border-l-primary" : "border-l-4 border-l-transparent",
                         !email.isRead && "font-semibold"
                     )}
                 >
@@ -132,32 +96,32 @@ export default function InboxPage() {
                         <div className="flex items-center gap-2">
                             <div className={cn(
                                 "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
-                                email.sentiment === 'Angry' ? "bg-red-100 text-red-600" : 
-                                email.sentiment === 'Positive' ? "bg-emerald-100 text-emerald-600" : 
+                                (email.intelligence?.sentiment || 'NEUTRAL') === 'ANGRY' ? "bg-red-100 text-red-600" : 
+                                (email.intelligence?.sentiment || 'NEUTRAL') === 'POSITIVE' ? "bg-emerald-100 text-emerald-600" : 
                                 "bg-indigo-100 text-primary"
                             )}>
-                                {email.sender.charAt(0)}
+                                {email.from.charAt(0)}
                             </div>
-                            <span className="text-sm tracking-tight">{email.sender}</span>
+                            <span className="text-sm tracking-tight">{email.from.split('<')[0]}</span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">{email.time}</span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">{new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
 
                     <div className="text-sm font-bold mb-1 line-clamp-1 group-hover:text-primary transition-colors">{email.subject}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-3">{email.preview}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-3">{email.body}</div>
 
                     <div className="flex flex-wrap items-center gap-2">
                         <span className={cn(
                             "px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest flex items-center gap-1",
-                            email.intent === 'Refund' ? "bg-red-50 text-red-600 border border-red-100" :
-                            email.intent === 'Sales' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                            email.intelligence?.intent === 'REFUND_REQUEST' ? "bg-red-50 text-red-600 border border-red-100" :
+                            email.intelligence?.intent === 'SALES_LEAD' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
                             "bg-indigo-50 text-primary border border-indigo-100"
                         )}>
                             <Zap className="w-2.5 h-2.5" />
-                            {email.intent}
+                            {email.intelligence?.intent || 'OTHER'}
                         </span>
                         
-                        {email.priority === 'High' && (
+                        {email.intelligence?.priority === 'HIGH' && (
                              <span className="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 border border-orange-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
                                 <AlertCircle className="w-2.5 h-2.5" />
                                 HIGH PRIORITY
@@ -206,14 +170,14 @@ export default function InboxPage() {
                       <div>
                           <div className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mb-1">AI Intelligence Analysis</div>
                           <div className="flex items-center gap-3 mb-2 flex-wrap">
-                              <span className="text-xl font-bold tracking-tight">Detected Intent: <span className="text-primary italic">{selectedEmail.intent}</span></span>
+                              <span className="text-xl font-bold tracking-tight">Detected Intent: <span className="text-primary italic">{selectedEmail.intelligence?.intent || 'OTHER'}</span></span>
                               <div className="px-3 py-1 rounded-xl bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary">
-                                 {selectedEmail.confidence}% Confidence
+                                 {Math.round((selectedEmail.intelligence?.confidence || 0) * 100)}% Confidence
                               </div>
                           </div>
                           <div className="text-sm text-primary/70 font-medium max-w-2xl leading-relaxed">
-                              Analysis: This customer is expressing <span className="font-bold text-primary">{selectedEmail.sentiment.toLowerCase()}</span> sentiment regarding {selectedEmail.intent.toLowerCase()}. 
-                              High priority due to refund demand and temporal keywords.
+                              Analysis: This customer is expressing <span className="font-bold text-primary">{(selectedEmail.intelligence?.sentiment || 'neutral').toLowerCase()}</span> sentiment regarding {(selectedEmail.intelligence?.intent || 'general query').toLowerCase().replace('_', ' ')}. 
+                              {selectedEmail.intelligence?.priority === 'HIGH' ? 'High priority due to sentiment and intent detection.' : 'Standard priority processing.'}
                           </div>
                       </div>
                   </div>
@@ -222,21 +186,21 @@ export default function InboxPage() {
               <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center gap-4">
                       <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-xl text-primary border-4 border-white shadow-xl">
-                          {selectedEmail.sender.charAt(0)}
+                          {selectedEmail.from.charAt(0)}
                       </div>
                       <div>
-                          <div className="text-xl font-extrabold tracking-tight">{selectedEmail.sender}</div>
+                          <div className="text-xl font-extrabold tracking-tight">{selectedEmail.from.split('<')[0]}</div>
                           <div className="text-sm text-muted-foreground font-medium flex items-center gap-2">
-                              {selectedEmail.senderEmail} 
+                              {selectedEmail.from} 
                               <span className="w-1 h-1 rounded-full bg-border" />
-                              To: support@yourcompany.com
+                              To: {selectedEmail.to}
                           </div>
                       </div>
                   </div>
                   <div className="text-right">
-                      <div className="text-sm font-bold tracking-tight mb-1">Today, 2:45 PM</div>
+                      <div className="text-sm font-bold tracking-tight mb-1">{new Date(selectedEmail.receivedAt).toLocaleDateString()}</div>
                       <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground font-medium">
-                          <Clock className="w-3 h-3" /> Seen 5m ago
+                          <Clock className="w-3 h-3" /> {new Date(selectedEmail.receivedAt).toLocaleTimeString()}
                       </div>
                   </div>
               </div>
@@ -244,10 +208,7 @@ export default function InboxPage() {
               <h1 className="text-3xl font-extrabold tracking-tight mb-8 underline decoration-primary/20 underline-offset-8 decoration-4">{selectedEmail.subject}</h1>
 
               <div className="prose prose-slate dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-lg mb-12">
-                  <p>Hi team,</p>
-                  <p>{selectedEmail.preview} {selectedEmail.preview} {selectedEmail.preview}</p>
-                  <p>I would appreciate a quick resolution on this. I've been a loyal customer for years but this experience is making me reconsider.</p>
-                  <p>Best regards,<br/>{selectedEmail.sender}</p>
+                  <p>{selectedEmail.body}</p>
               </div>
 
               {/* AI Draft Section */}
@@ -270,7 +231,7 @@ export default function InboxPage() {
                   <div className="p-8 rounded-[2rem] border-2 border-primary/20 bg-[var(--gradient-soft)] relative shadow-2xl shadow-indigo-500/5 group-focus-within:border-primary/50 transition-all border-dashed">
                       <textarea 
                           className="w-full bg-transparent border-none outline-none text-muted-foreground leading-relaxed text-lg font-medium min-h-[150px] resize-none selection:bg-primary/20"
-                          defaultValue={selectedEmail.suggestedReply}
+                          defaultValue={selectedEmail.intelligence?.suggestedReply || 'Generating smart reply...'}
                           spellCheck={false}
                       />
                       
