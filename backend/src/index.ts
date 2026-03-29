@@ -32,4 +32,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 app.listen(PORT, () => {
-  co
+  console.log(`🚀 SaaS AI Email Backend running on port ${PORT}`);
+});
+
+export { prisma };
