@@ -8,11 +8,12 @@ import {
   Grid, 
   CheckCircle2, 
   Plus, 
-  ChevronRight,
+  ChevronRight, 
   ExternalLink,
   Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiService } from '@/services/api';
 
 const apps = [
   { 
@@ -20,7 +21,7 @@ const apps = [
     category: 'Communication', 
     icon: Mail, 
     color: 'emerald', 
-    connected: true, 
+    connected: false, // Default to false for demo connecting
     desc: 'Reading and responding to customer emails.'
   },
   { 
@@ -66,6 +67,19 @@ const apps = [
 ];
 
 export default function IntegrationsPage() {
+  const handleConnect = async (appName: string) => {
+    if (appName === 'Gmail') {
+      const userStr = localStorage.getItem('user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      if (!user) return alert('Please sign in first');
+      
+      const { data } = await apiService.getGoogleAuthUrl(user.tenantId);
+      window.location.href = data.url;
+    } else {
+      alert(`Integration with ${appName} is coming soon in the Professional tier!`);
+    }
+  };
+
   return (
     <div className="p-8 space-y-8 bg-slate-50 dark:bg-slate-950/50 h-full overflow-y-auto">
       <div className="flex items-center justify-between">
@@ -105,7 +119,9 @@ export default function IntegrationsPage() {
                         <div className={cn("w-2 h-2 rounded-full", app.connected ? "bg-emerald-500" : "bg-slate-300")} />
                         <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{app.connected ? 'Connected' : 'Disconnected'}</span>
                      </div>
-                     <button className={cn(
+                     <button 
+                        onClick={() => handleConnect(app.name)}
+                        className={cn(
                         "px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
                         app.connected ? "bg-muted text-muted-foreground hover:bg-muted/80" : "bg-primary text-white shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95"
                      )}>
