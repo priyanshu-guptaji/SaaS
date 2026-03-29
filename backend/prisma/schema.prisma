@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+  AGENT
+}
+
+enum EmailIntent {
+  SALES_LEAD
+  CUSTOMER_SUPPORT
+  ORDER_INQUIRY
+  REFUND_REQUEST
+  COMPLAINT
+  BILLING_ISSUE
+  MEETING_REQUEST
+  SPAM
+  OTHER
+}
+
+enum Sentiment {
+  POSITIVE
+  URGENT
+  NEUTRAL
+  ANGRY
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  PRO
+  BUSINESS
+}
+
+model Tenant {
+  id               String           @id @default(cuid())
+  name             String
+  domain           String?
+  industry         String?          @default("e-commerce")
+  tier             SubscriptionTier @default(FREE)
+  stripeCustomerId String?          @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  users        User[]
+  integrations Integration[]
+  workflows    Workflow[]
+  emails       Email[]
+  analytics    AnalyticsReport[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String?
+  name      String?
+  role      Role     @default(MEMBER)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedEmails Email[] @relation("AssignedUser")
+}
+
+model Integration {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  provider     String   // e.g., 'gmail', 'outlook', 'shopify'
+  accessToken  String?
+  refreshToken String?
+  emailAddress String?  // For mail provider integrations
+  expiresAt    DateTime?
+  status       String   // 'active', 'error', 'disconnected'
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, provider, emailAddress])
+}
+
+model Email {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  externalId      String   // External ID from provider (like GMail Message ID)
+  threadId        String?
+  subject         String?
+  from            String
+  to              String
+  body            String   @db.Text
+  receivedAt      DateTime @default(now())
+  isRead          Boolean  @default(false)
+  status          String   // 'pending', 'processed', 'responded', 'resolved'
+  assignedTo      String?
+  assignedUser    User?    @relation("AssignedUser", fields: [assignedTo], references: [id])
+
+  intelligence    EmailIntelligence?
+}
+
+model EmailIntelligence {
+  id             String      @id @default(cuid())
+  emailId        String      @unique
+  email          Email       @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  intent         EmailIntent @default(OTHER)
+  sentiment      Sentiment   @default(NEUTRAL)
+  priority       Priority    @default(MEDIUM)
+  confidence     Float       @default(0.0)
+  suggestedReply String?     @db.Text
+  extractedData  Json?       // Structured data like order IDs, products, etc.
+  processedAt    DateTime    @default(now())
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  trigger     Json     // e.g., { "if": { "intent": "SALES_LEAD" } }
+  action      Json     // e.g., { "then": [{ "type": "SLACK_NOTIFY", "channel": "#leads" }] }
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AnalyticsReport {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  date             DateTime @default(now())
+  emailsProcessed  Int      @default(0)
+  aiRepliesSent    Int      @default(0)
+  avgResponseTime  Float?   // in seconds
+  hoursSaved       Float?   @default(0.0)
+  missedRevenue    Float?   @default(0.0) // Estimated missed revenue
+}
