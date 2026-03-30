@@ -1,13 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo, useCallback } from 'react';
 import { 
   Search, 
-  Filter, 
-  Mail, 
-  Inbox as InboxIcon, 
   UserPlus, 
-  ArrowRight, 
   CheckCircle2, 
   Zap, 
   AlertCircle,
@@ -19,35 +15,119 @@ import {
   Trash2,
   Reply,
   ReplyAll,
-  Check,
   ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
+import { EmailListSkeleton, EmailDetailSkeleton } from '@/components/ui/Skeleton';
+
+interface EmailItemProps {
+  email: Email;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}
+
+const EmailItem = memo(function EmailItem({ email, isSelected, onSelect }: EmailItemProps) {
+  const sentiment = email.intelligence?.sentiment || 'NEUTRAL';
+  const intent = email.intelligence?.intent || 'OTHER';
+  const priority = email.intelligence?.priority;
+  
+  const sentimentColors = useMemo(() => {
+    if (sentiment === 'ANGRY') return 'bg-red-100 text-red-600';
+    if (sentiment === 'POSITIVE') return 'bg-emerald-100 text-emerald-600';
+    return 'bg-indigo-100 text-primary';
+  }, [sentiment]);
+
+  const intentColors = useMemo(() => {
+    if (intent === 'REFUND_REQUEST') return { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-100' };
+    if (intent === 'SALES_LEAD') return { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100' };
+    return { bg: 'bg-indigo-50', text: 'text-primary', border: 'border-indigo-100' };
+  }, [intent]);
+
+  return (
+    <div 
+      onClick={() => onSelect(email.id)}
+      className={cn(
+        "p-5 cursor-pointer border-b border-border/60 transition-all hover:bg-primary/5 group relative",
+        isSelected ? "bg-primary/5 border-l-4 border-l-primary" : "border-l-4 border-l-transparent",
+        !email.isRead && "font-semibold"
+      )}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm", sentimentColors)}>
+            {email.from.charAt(0)}
+          </div>
+          <span className="text-sm tracking-tight">{email.from.split('<')[0]}</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">{new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
+
+      <div className="text-sm font-bold mb-1 line-clamp-1 group-hover:text-primary transition-colors">{email.subject}</div>
+      <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-3">{email.body}</div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn("px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest flex items-center gap-1", intentColors.bg, intentColors.text, intentColors.border)}>
+          <Zap className="w-2.5 h-2.5" />
+          {intent}
+        </span>
+        
+        {priority === 'HIGH' && (
+          <span className="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 border border-orange-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
+            <AlertCircle className="w-2.5 h-2.5" />
+            HIGH PRIORITY
+          </span>
+        )}
+
+        {!email.isRead && <div className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse shadow-glow shadow-primary/50" />}
+      </div>
+    </div>
+  );
+});
+
+interface Email {
+  id: string;
+  from: string;
+  subject: string;
+  body: string;
+  to: string;
+  receivedAt: string;
+  isRead: boolean;
+  intelligence?: {
+    intent?: string;
+    sentiment?: string;
+    priority?: string;
+    confidence?: number;
+    suggestedReply?: string;
+  };
+}
 
 export default function InboxPage() {
-  const queryClient = useQueryClient();
-  const { data: emails = [], isLoading } = useQuery({
+  const { data: emails = [], isLoading } = useQuery<Email[]>({
     queryKey: ['emails'],
     queryFn: async () => {
       const { data } = await apiService.getEmails();
-      return data;
-    }
+      return data as Email[];
+    },
+    staleTime: 30000,
   });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedEmail = emails.find((e: any) => e.id === (selectedId || emails[0]?.id)) || emails[0];
+  
+  const handleSelectEmail = useCallback((id: string) => {
+    setSelectedId(id);
+  }, []);
+  
+  const selectedEmail = useMemo(() => {
+    return emails.find((e) => e.id === (selectedId || emails[0]?.id)) || emails[0];
+  }, [emails, selectedId]);
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-950/50">
-          <div className="flex flex-col items-center gap-6">
-              <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center text-primary animate-bounce shadow-xl shadow-indigo-500/10">
-                  <Mail className="w-8 h-8" />
-              </div>
-              <div className="text-sm font-bold text-muted-foreground uppercase tracking-[0.2em] animate-pulse">Syncing Intelligence...</div>
-          </div>
+      <div className="flex h-[calc(100vh-80px)] overflow-hidden bg-slate-50 dark:bg-slate-950/50">
+        <EmailListSkeleton />
+        <EmailDetailSkeleton />
       </div>
     );
   }
@@ -82,55 +162,13 @@ export default function InboxPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {emails.map((email: any) => (
-                <div 
+            {emails.map((email) => (
+                <EmailItem 
                     key={email.id} 
-                    onClick={() => setSelectedId(email.id)}
-                    className={cn(
-                        "p-5 cursor-pointer border-b border-border/60 transition-all hover:bg-primary/5 group relative",
-                        (selectedId || emails[0]?.id) === email.id ? "bg-primary/5 border-l-4 border-l-primary" : "border-l-4 border-l-transparent",
-                        !email.isRead && "font-semibold"
-                    )}
-                >
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                            <div className={cn(
-                                "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
-                                (email.intelligence?.sentiment || 'NEUTRAL') === 'ANGRY' ? "bg-red-100 text-red-600" : 
-                                (email.intelligence?.sentiment || 'NEUTRAL') === 'POSITIVE' ? "bg-emerald-100 text-emerald-600" : 
-                                "bg-indigo-100 text-primary"
-                            )}>
-                                {email.from.charAt(0)}
-                            </div>
-                            <span className="text-sm tracking-tight">{email.from.split('<')[0]}</span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">{new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-
-                    <div className="text-sm font-bold mb-1 line-clamp-1 group-hover:text-primary transition-colors">{email.subject}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-3">{email.body}</div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className={cn(
-                            "px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest flex items-center gap-1",
-                            email.intelligence?.intent === 'REFUND_REQUEST' ? "bg-red-50 text-red-600 border border-red-100" :
-                            email.intelligence?.intent === 'SALES_LEAD' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
-                            "bg-indigo-50 text-primary border border-indigo-100"
-                        )}>
-                            <Zap className="w-2.5 h-2.5" />
-                            {email.intelligence?.intent || 'OTHER'}
-                        </span>
-                        
-                        {email.intelligence?.priority === 'HIGH' && (
-                             <span className="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 border border-orange-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
-                                <AlertCircle className="w-2.5 h-2.5" />
-                                HIGH PRIORITY
-                             </span>
-                        )}
-
-                        {!email.isRead && <div className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse shadow-glow shadow-primary/50" />}
-                    </div>
-                </div>
+                    email={email}
+                    isSelected={(selectedId || emails[0]?.id) === email.id}
+                    onSelect={handleSelectEmail}
+                />
             ))}
         </div>
       </div>

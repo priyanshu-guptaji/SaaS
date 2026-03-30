@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ShoppingBag, 
   Mail, 
@@ -14,6 +14,14 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiService } from '@/services/api';
+
+const colorMap: Record<string, { bg: string; text: string }> = {
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-600' },
+  blue: { bg: 'bg-blue-50', text: 'text-blue-600' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-600' },
+};
 
 const apps = [
   { 
@@ -67,6 +75,14 @@ const apps = [
 ];
 
 export default function IntegrationsPage() {
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    }
+  }, [redirectUrl]);
+
   const handleConnect = async (appName: string) => {
     if (appName === 'Gmail') {
       const userStr = localStorage.getItem('user');
@@ -74,7 +90,7 @@ export default function IntegrationsPage() {
       if (!user) return alert('Please sign in first');
       
       const { data } = await apiService.getGoogleAuthUrl(user.tenantId);
-      window.location.href = data.url;
+      setRedirectUrl(data.url);
     } else {
       alert(`Integration with ${appName} is coming soon in the Professional tier!`);
     }
@@ -104,9 +120,9 @@ export default function IntegrationsPage() {
                     </div>
                  )}
                  
-                 <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-6", `bg-${app.color}-50 text-${app.color}-600`)}>
-                     <app.icon className="w-7 h-7" />
-                 </div>
+                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-6", colorMap[app.color]?.bg, colorMap[app.color]?.text)}>
+                      <app.icon className="w-7 h-7" />
+                  </div>
                  
                  <div className="font-bold text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">{app.category}</div>
                  <h3 className="text-2xl font-extrabold tracking-tight mb-3 group-hover:text-primary transition-colors">{app.name}</h3>

@@ -6,7 +6,7 @@ import {
   Plus, 
   Mail, 
   Zap, 
-  Slack, 
+  MessageSquare,
   Globe, 
   UserPlus, 
   ChevronRight,
@@ -77,7 +77,7 @@ export default function WorkflowsPage() {
                  <div className="flex items-center gap-3 px-8 border-x border-border/60 mx-8">
                      {workflow.actions.map((act, idx) => (
                         <div key={idx} className="px-3 py-1.5 rounded-xl bg-muted/50 border border-border text-xs font-bold text-muted-foreground flex items-center gap-2">
-                            {act.includes('Slack') ? <Slack className="w-3.5 h-3.5" /> : act.includes('Assign') ? <UserPlus className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
+                             {act.includes('Slack') ? <MessageSquare className="w-3.5 h-3.5" /> : act.includes('Assign') ? <UserPlus className="w-3.5 h-3.5" /> : <Mail className="w-3.5 h-3.5" />}
                             {act}
                         </div>
                      ))}

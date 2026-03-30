@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -28,6 +28,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FadeIn } from '@/components/ui/PageTransition';
 
 const timeData = [
   { name: 'Mon', hours: 4.5 },
@@ -66,44 +67,50 @@ const stats = [
 ];
 
 export default function AnalyticsPage() {
+  const statCards = useMemo(() => stats.map((stat, i) => ({ stat, i })), []);
+
   return (
     <div className="p-8 space-y-8 h-full overflow-y-auto custom-scrollbar bg-slate-50 dark:bg-slate-950/50">
-      <div className="flex items-center justify-between">
-          <div>
-              <h1 className="text-3xl font-extrabold tracking-tight underline decoration-primary/20 underline-offset-8">Analytics Dashboard</h1>
-              <p className="text-muted-foreground mt-1.5 font-medium">Real-time performance tracking for your inbox operations.</p>
-          </div>
-          <div className="flex items-center gap-3">
-              <button className="px-5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-border text-sm font-bold flex items-center gap-2 hover:border-primary/30 transition-all">
-                  Last 7 Days <ChevronRight className="w-4 h-4 rotate-90" />
-              </button>
-              <button className="btn-primary !px-6 !py-2.5 text-sm flex items-center gap-2">
-                  <ExternalLink className="w-4 h-4" /> Export Report
-              </button>
-          </div>
-      </div>
+      <FadeIn>
+        <div className="flex items-center justify-between">
+            <div>
+                <h1 className="text-3xl font-extrabold tracking-tight underline decoration-primary/20 underline-offset-8">Analytics Dashboard</h1>
+                <p className="text-muted-foreground mt-1.5 font-medium">Real-time performance tracking for your inbox operations.</p>
+            </div>
+            <div className="flex items-center gap-3">
+                <button className="px-5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-border text-sm font-bold flex items-center gap-2 hover:border-primary/30 transition-all">
+                    Last 7 Days <ChevronRight className="w-4 h-4 rotate-90" />
+                </button>
+                <button className="btn-primary !px-6 !py-2.5 text-sm flex items-center gap-2">
+                    <ExternalLink className="w-4 h-4" /> Export Report
+                </button>
+            </div>
+        </div>
+      </FadeIn>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, i) => (
-              <div key={i} className="p-8 rounded-[2rem] border border-border bg-white dark:bg-slate-950 hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group overflow-hidden relative">
-                  <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all">
-                      <stat.icon className="w-24 h-24 text-slate-900 dark:text-white" />
-                  </div>
-                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center mb-6", stat.color.replace('text', 'bg').concat('/10'))}>
-                      <stat.icon className={cn("w-6 h-6", stat.color)} />
-                  </div>
-                  <div className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{stat.label}</div>
-                  <div className="text-4xl font-extrabold tracking-tight mb-2 flex items-baseline gap-2">
-                      {stat.value}
-                      <span className={cn(
-                          "text-xs font-bold px-2 py-0.5 rounded-lg",
-                          stat.trend === 'up' ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
-                      )}>
-                          {stat.desc}
-                      </span>
-                  </div>
-                  <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.2em]">Updated 3m ago</div>
-              </div>
+          {statCards.map(({ stat, i }) => (
+              <FadeIn key={i} delay={i * 0.05}>
+                <div className="p-8 rounded-[2rem] border border-border bg-white dark:bg-slate-950 hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group overflow-hidden relative">
+                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all">
+                        <stat.icon className="w-24 h-24 text-slate-900 dark:text-white" />
+                    </div>
+                    <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center mb-6", stat.color.replace('text', 'bg').concat('/10'))}>
+                        <stat.icon className={cn("w-6 h-6", stat.color)} />
+                    </div>
+                    <div className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{stat.label}</div>
+                    <div className="text-4xl font-extrabold tracking-tight mb-2 flex items-baseline gap-2">
+                        {stat.value}
+                        <span className={cn(
+                            "text-xs font-bold px-2 py-0.5 rounded-lg",
+                            stat.trend === 'up' ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                        )}>
+                            {stat.desc}
+                        </span>
+                    </div>
+                    <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-[0.2em]">Updated 3m ago</div>
+                </div>
+              </FadeIn>
           ))}
       </div>
 

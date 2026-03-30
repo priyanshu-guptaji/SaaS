@@ -23,8 +23,9 @@ export default function LoginPage() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to sign in. Please check your credentials.');
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to sign in. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -109,9 +110,9 @@ export default function LoginPage() {
           </div>
        </div>
 
-       <p className="mt-10 text-muted-foreground font-medium">
-          Don't have an account? <Link href="/signup" className="text-primary font-bold hover:underline">Create a local workspace</Link>
-       </p>
+        <p className="mt-10 text-muted-foreground font-medium">
+           Don&apos;t have an account? <Link href="/signup" className="text-primary font-bold hover:underline">Create a local workspace</Link>
+        </p>
     </div>
   );
 }

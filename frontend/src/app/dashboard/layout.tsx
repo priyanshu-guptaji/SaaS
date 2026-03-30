@@ -1,4 +1,7 @@
+'use client';
+
 import { DashboardSidebar } from '@/components/dashboard/Sidebar';
+import { PageTransition } from '@/components/ui/PageTransition';
 
 export default function DashboardLayout({
   children,
@@ -9,7 +12,6 @@ export default function DashboardLayout({
     <div className="flex h-screen bg-background overflow-hidden">
       <DashboardSidebar />
       <main className="flex-1 overflow-auto relative">
-        {/* Top Navbar */}
         <header className="h-20 border-b border-border bg-white/50 dark:bg-slate-900/50 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between px-8">
             <div className="flex items-center gap-4">
                 <div className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest border border-primary/20">
@@ -33,7 +35,9 @@ export default function DashboardLayout({
         </header>
         
         <div className="relative">
-            {children}
+            <PageTransition>
+              {children}
+            </PageTransition>
         </div>
       </main>
     </div>
