@@ -1,11 +1,15 @@
 import { Request, Response } from 'express';
 import { prisma } from '../index';
-import { subDays, startOfDay, endOfDay } from 'date-fns';
+import { subDays } from 'date-fns';
 
 export class AnalyticsController {
   static async getSummary(req: Request, res: Response) {
-    const tenantId = req.query.tenantId as string;
+    const tenantId = req.tenantId;
     const days = parseInt(req.query.days as string || '7');
+
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant ID required' });
+    }
 
     const reports = await prisma.analyticsReport.findMany({
       where: { 
@@ -34,7 +38,11 @@ export class AnalyticsController {
   }
 
   static async getIntentDistribution(req: Request, res: Response) {
-    const tenantId = req.query.tenantId as string;
+    const tenantId = req.tenantId;
+
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant ID required' });
+    }
 
     const aggregation = await prisma.emailIntelligence.groupBy({
       by: ['intent'],
@@ -45,5 +53,34 @@ export class AnalyticsController {
     });
 
     res.json(aggregation);
+  }
+
+  static async getEmailVolume(req: Request, res: Response) {
+    const tenantId = req.tenantId;
+    const days = parseInt(req.query.days as string || '7');
+
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant ID required' });
+    }
+
+    const emails = await prisma.email.findMany({
+      where: {
+        tenantId,
+        receivedAt: { gte: subDays(new Date(), days) }
+      },
+      select: {
+        receivedAt: true,
+        status: true,
+        intelligence: {
+          select: {
+            intent: true,
+            priority: true,
+          }
+        }
+      },
+      orderBy: { receivedAt: 'asc' }
+    });
+
+    res.json(emails);
   }
 }

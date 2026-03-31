@@ -12,11 +12,12 @@ import {
   Plug, 
   CreditCard,
   Mail,
-  HelpCircle,
   Menu,
   ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { LogoutButton } from '@/components/auth/LogoutButton';
 
 const sidebarItems = [
   { label: 'Inbox', icon: Inbox, href: '/dashboard/inbox' },
@@ -29,10 +30,24 @@ const sidebarItems = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  const getUserInitials = () => {
+    if (!user?.name) return 'U';
+    return user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const getRoleLabel = () => {
+    switch (user?.role) {
+      case 'ADMIN': return 'Admin';
+      case 'MEMBER': return 'Team Member';
+      case 'AGENT': return 'Agent';
+      default: return 'User';
+    }
+  };
 
   return (
     <aside className="w-80 h-full border-r border-border bg-white dark:bg-slate-950 flex flex-col pt-8 selection:bg-primary/20">
-      {/* Brand Logo */}
       <div className="px-10 mb-12 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2.5">
             <div className="bg-primary/15 p-2 rounded-xl group-hover:bg-primary/25 transition-all">
@@ -70,31 +85,35 @@ export function DashboardSidebar() {
         })}
       </nav>
 
-      {/* Stats Quick View Card */}
       <div className="mx-6 mb-8 mt-auto">
           <div className="p-6 rounded-3xl bg-[var(--gradient-primary)] text-white shadow-xl overflow-hidden relative">
               <Zap className="absolute -right-2 -bottom-2 w-20 h-20 text-white/10 rotate-12" />
               <div className="relative z-10">
                   <div className="text-xs font-semibold opacity-80 uppercase tracking-widest mb-1.5">Weekly Savings</div>
                   <div className="text-3xl font-bold mb-4 tracking-tight">24.5h</div>
-                  <button className="w-full py-2.5 px-4 bg-white/20 backdrop-blur-md rounded-xl text-sm font-semibold hover:bg-white/30 transition-all active:scale-95">
+                  <Link href="/dashboard/analytics" className="w-full py-2.5 px-4 bg-white/20 backdrop-blur-md rounded-xl text-sm font-semibold hover:bg-white/30 transition-all active:scale-95 block text-center">
                       Explore AI Performance
-                  </button>
+                  </Link>
               </div>
           </div>
       </div>
 
       <div className="p-6 border-t border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-primary">JD</div>
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-primary">
+              {getUserInitials()}
+            </div>
             <div>
-                <div className="text-sm font-bold truncate max-w-[100px]">John Doe</div>
-                <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Business Owner</div>
+                <div className="text-sm font-bold truncate max-w-[100px]">{user?.name || 'User'}</div>
+                <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{getRoleLabel()}</div>
             </div>
         </div>
-        <Link href="/dashboard/settings" className="p-2.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-primary transition-all">
-            <Settings className="w-5 h-5" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/settings" className="p-2.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-primary transition-all">
+              <Settings className="w-5 h-5" />
+          </Link>
+          <LogoutButton />
+        </div>
       </div>
     </aside>
   );

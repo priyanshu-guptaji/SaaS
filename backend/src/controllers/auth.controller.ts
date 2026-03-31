@@ -3,32 +3,108 @@ import { GmailService } from '../services/emails/gmail.service';
 import { prisma } from '../index';
 import { google } from 'googleapis';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 
 const gmailService = new GmailService();
+
+function requireEnvVar(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
 
 export class AuthController {
   static async signin(req: Request, res: Response) {
     const { email, password } = req.body;
     
-    // Simple User-Tenant mapping (MVP)
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
     const user = await prisma.user.findUnique({
       where: { email },
       include: { tenant: true }
     });
 
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user || !user.password) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
     const token = jwt.sign(
       { id: user.id, tenantId: user.tenantId, role: user.role },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: '24h' }
+      requireEnvVar('JWT_SECRET'),
+      { expiresIn: '1h' }
     );
 
-    res.json({ token, user: { id: user.id, name: user.name, role: user.role, tenantId: user.tenantId } });
+    const refreshToken = jwt.sign(
+      { id: user.id, type: 'refresh' },
+      requireEnvVar('JWT_SECRET'),
+      { expiresIn: '7d' }
+    );
+
+    res.json({ 
+      token, 
+      refreshToken,
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email,
+        role: user.role, 
+        tenantId: user.tenantId,
+        tier: user.tenant.tier
+      } 
+    });
+  }
+
+  static async refreshToken(req: Request, res: Response) {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    try {
+      const decoded = jwt.verify(refreshToken, requireEnvVar('JWT_SECRET')) as { id: string; type: string };
+      
+      if (decoded.type !== 'refresh') {
+        return res.status(401).json({ error: 'Invalid token type' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        include: { tenant: true }
+      });
+
+      if (!user) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+
+      const token = jwt.sign(
+        { id: user.id, tenantId: user.tenantId, role: user.role },
+        requireEnvVar('JWT_SECRET'),
+        { expiresIn: '1h' }
+      );
+
+      res.json({ token });
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
   }
 
   static async getGoogleAuthUrl(req: Request, res: Response) {
-    const tenantId = req.query.tenantId as string;
+    const tenantId = req.headers['x-tenant-id'] as string;
+    
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant ID required' });
+    }
+    
     const url = gmailService.getAuthUrl(tenantId);
     res.json({ url });
   }
@@ -37,15 +113,14 @@ export class AuthController {
     const { code, state: tenantId } = req.query;
     
     const oauth2Client = new google.auth.OAuth2(
-      process.env.GMAIL_CLIENT_ID,
-      process.env.GMAIL_CLIENT_SECRET,
-      process.env.GMAIL_REDIRECT_URI
+      requireEnvVar('GMAIL_CLIENT_ID'),
+      requireEnvVar('GMAIL_CLIENT_SECRET'),
+      requireEnvVar('GMAIL_REDIRECT_URI')
     );
 
     const { tokens } = await oauth2Client.getToken(code as string);
     const userInfo = await oauth2Client.getTokenInfo(tokens.access_token!);
 
-    // Save Integration
     await prisma.integration.upsert({
       where: {
         tenantId_provider_emailAddress: {

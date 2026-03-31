@@ -9,27 +9,77 @@ import apiRouter from './routes/index';
 
 dotenv.config();
 
+const requiredEnvVars = [
+  'DATABASE_URL',
+  'JWT_SECRET',
+  'OPENAI_API_KEY',
+];
+
+function validateEnvironment() {
+  const missing: string[] = [];
+  for (const key of requiredEnvVars) {
+    if (!process.env[key]) {
+      missing.push(key);
+    }
+  }
+  if (missing.length > 0) {
+    console.error(`Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
+validateEnvironment();
+
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
-app.use(helmet());
-app.use(morgan('dev'));
-app.use(cors());
-app.use(express.json());
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(morgan('combined'));
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  credentials: true,
+}));
+app.use(express.json({ limit: '10mb' }));
 
-// Main API Router
 app.use('/api', apiRouter);
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'error', 
+      timestamp: new Date().toISOString(),
+      database: 'disconnected'
+    });
+  }
 });
 
-// Basic Error Handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  
+  const isDev = process.env.NODE_ENV !== 'production';
+  
+  res.status(500).json({ 
+    error: isDev ? err.message : 'Internal Server Error',
+    ...(isDev && { stack: err.stack }),
+  });
 });
+
+async function gracefulShutdown() {
+  console.log('Shutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 app.listen(PORT, () => {
   console.log(`🚀 SaaS AI Email Backend running on port ${PORT}`);

@@ -60,6 +60,8 @@ model Tenant {
   workflows    Workflow[]
   emails       Email[]
   analytics    AnalyticsReport[]
+
+  @@index([name])
 }
 
 model User {
@@ -74,29 +76,34 @@ model User {
   updatedAt DateTime @updatedAt
 
   assignedEmails Email[] @relation("AssignedUser")
+
+  @@index([tenantId])
+  @@index([email, tenantId])
 }
 
 model Integration {
   id           String   @id @default(cuid())
   tenantId     String
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  provider     String   // e.g., 'gmail', 'outlook', 'shopify'
+  provider     String
   accessToken  String?
   refreshToken String?
-  emailAddress String?  // For mail provider integrations
+  emailAddress String?
   expiresAt    DateTime?
-  status       String   // 'active', 'error', 'disconnected'
+  status       String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([tenantId, provider, emailAddress])
+  @@index([tenantId])
+  @@index([tenantId, status])
 }
 
 model Email {
   id              String   @id @default(cuid())
   tenantId        String
   tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  externalId      String   // External ID from provider (like GMail Message ID)
+  externalId      String
   threadId        String?
   subject         String?
   from            String
@@ -104,11 +111,17 @@ model Email {
   body            String   @db.Text
   receivedAt      DateTime @default(now())
   isRead          Boolean  @default(false)
-  status          String   // 'pending', 'processed', 'responded', 'resolved'
+  status          String
   assignedTo      String?
   assignedUser    User?    @relation("AssignedUser", fields: [assignedTo], references: [id])
 
   intelligence    EmailIntelligence?
+
+  @@index([tenantId])
+  @@index([tenantId, receivedAt])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo])
+  @@index([externalId])
 }
 
 model EmailIntelligence {
@@ -120,8 +133,12 @@ model EmailIntelligence {
   priority       Priority    @default(MEDIUM)
   confidence     Float       @default(0.0)
   suggestedReply String?     @db.Text
-  extractedData  Json?       // Structured data like order IDs, products, etc.
+  extractedData  Json?
   processedAt    DateTime    @default(now())
+
+  @@index([intent])
+  @@index([priority])
+  @@index([sentiment])
 }
 
 model Workflow {
@@ -129,11 +146,14 @@ model Workflow {
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
   name        String
-  trigger     Json     // e.g., { "if": { "intent": "SALES_LEAD" } }
-  action      Json     // e.g., { "then": [{ "type": "SLACK_NOTIFY", "channel": "#leads" }] }
+  trigger     Json
+  action      Json
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
 }
 
 model AnalyticsReport {
@@ -143,7 +163,10 @@ model AnalyticsReport {
   date             DateTime @default(now())
   emailsProcessed  Int      @default(0)
   aiRepliesSent    Int      @default(0)
-  avgResponseTime  Float?   // in seconds
+  avgResponseTime  Float?
   hoursSaved       Float?   @default(0.0)
-  missedRevenue    Float?   @default(0.0) // Estimated missed revenue
+  missedRevenue    Float?   @default(0.0)
+
+  @@index([tenantId])
+  @@index([tenantId, date])
 }

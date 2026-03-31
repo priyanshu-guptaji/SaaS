@@ -9,9 +9,32 @@ dotenv.config();
 
 const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
+  retryStrategy: (times) => {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  },
 });
 
-export const emailQueue = new Queue('EmailProcessor', { connection });
+connection.on('error', (err) => {
+  console.error('Redis connection error:', err);
+});
+
+connection.on('connect', () => {
+  console.log('Redis connected successfully');
+});
+
+export const emailQueue = new Queue('EmailProcessor', { 
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 1000,
+    },
+    removeOnComplete: true,
+    removeOnFail: false,
+  },
+});
 
 export const emailWorker = new Worker('EmailProcessor', async (job: Job) => {
   const { emailId, subject, body, tenantId } = job.data;
@@ -50,11 +73,23 @@ export const emailWorker = new Worker('EmailProcessor', async (job: Job) => {
 
     console.log(`Successfully analyzed email: ${emailId}`);
 
-    // Trigger Workflow Rules here...
-    // TODO: WorkflowEngine.run(emailId, tenantId, analysis);
-    
   } catch (error) {
     console.error(`Error processing job ${job.id}:`, error);
     throw error;
   }
-}, { connection });
+}, { 
+  connection,
+  concurrency: 5,
+});
+
+emailWorker.on('completed', (job) => {
+  console.log(`Job ${job.id} completed successfully`);
+});
+
+emailWorker.on('failed', (job, err) => {
+  console.error(`Job ${job?.id} failed:`, err.message);
+});
+
+emailWorker.on('error', (err) => {
+  console.error('Worker error:', err);
+});

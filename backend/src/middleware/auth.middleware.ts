@@ -1,14 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import * as jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 
-// Extend Request type
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-      tenantId?: string;
-    }
+function requireEnvVar(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
   }
+  return value;
+}
+
+export interface JwtPayload {
+  id: string;
+  tenantId: string;
+  role: string;
 }
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
@@ -20,23 +24,39 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+    const decoded = jwt.verify(token, requireEnvVar('JWT_SECRET')) as JwtPayload;
     req.user = decoded;
     req.tenantId = decoded.tenantId;
     next();
   } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ error: 'Token expired' });
+    }
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
 };
 
 export const tenantMiddleware = (req: Request, res: Response, next: NextFunction) => {
-    // For MVP, we might allow passing tenantId in headers if not using standard Auth
-    const tenantId = req.headers['x-tenant-id'] as string || req.tenantId;
-    
-    if (!tenantId) {
-        return res.status(403).json({ error: 'Tenant ID required' });
+  const tenantId = req.headers['x-tenant-id'] as string || req.tenantId;
+  
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Tenant ID required' });
+  }
+  
+  req.tenantId = tenantId;
+  next();
+};
+
+export const requireRole = (...roles: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
     
-    req.tenantId = tenantId;
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+    }
+    
     next();
+  };
 };

@@ -1,9 +1,11 @@
 import { PrismaClient, EmailIntent, Priority, Sentiment, Role, SubscriptionTier } from '@prisma/client';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // 1. Create Tenant
+  const hashedPassword = await bcrypt.hash('admin123', 10);
+
   const tenant = await prisma.tenant.upsert({
     where: { id: 'cl_tenant_123' },
     update: {},
@@ -15,13 +17,13 @@ async function main() {
     },
   });
 
-  // 2. Create User
   await prisma.user.upsert({
     where: { email: 'admin@ecommflow.com' },
     update: {},
     create: {
       email: 'admin@ecommflow.com',
       name: 'John Doe',
+      password: hashedPassword,
       role: Role.ADMIN,
       tenantId: tenant.id,
     },
