@@ -1,16 +1,17 @@
 import { Request, Response } from 'express';
-import { prisma } from '../index';
+import { prisma } from '../lib/prisma';
 import { emailQueue } from '../services/queue/email-processor';
+import { GmailService } from '../services/emails/gmail.service';
 
 interface PaginationParams {
-  page?: number;
-  limit?: number;
+  page: number;
+  limit: number;
   status?: string;
   priority?: string;
   intent?: string;
 }
 
-function getPaginationParams(query: Request['query']): PaginationParams {
+function getPaginationParams(query: any): PaginationParams {
   return {
     page: query.page ? parseInt(query.page as string) : 1,
     limit: query.limit ? Math.min(parseInt(query.limit as string), 100) : 50,
@@ -22,7 +23,7 @@ function getPaginationParams(query: Request['query']): PaginationParams {
 
 export class EmailController {
   static async list(req: Request, res: Response) {
-    const tenantId = req.tenantId;
+    const tenantId = req.tenantId as string;
     const { page, limit, status, priority, intent } = getPaginationParams(req.query);
     
     if (!tenantId) {
@@ -63,8 +64,8 @@ export class EmailController {
   }
 
   static async get(req: Request, res: Response) {
-    const { id } = req.params;
-    const tenantId = req.tenantId;
+    const id = req.params.id as string;
+    const tenantId = req.tenantId as string;
     
     if (!tenantId) {
       return res.status(403).json({ error: 'Tenant ID required' });
@@ -83,8 +84,8 @@ export class EmailController {
   }
 
   static async triggerAnalysis(req: Request, res: Response) {
-    const { id } = req.params;
-    const tenantId = req.tenantId;
+    const id = req.params.id as string;
+    const tenantId = req.tenantId as string;
     
     if (!tenantId) {
       return res.status(403).json({ error: 'Tenant ID required' });
@@ -109,8 +110,8 @@ export class EmailController {
   }
 
   static async updateIntelligence(req: Request, res: Response) {
-    const { id } = req.params;
-    const tenantId = req.tenantId;
+    const id = req.params.id as string;
+    const tenantId = req.tenantId as string;
     const { intent, priority, sentiment, suggestedReply } = req.body;
     
     if (!tenantId) {
@@ -134,8 +135,8 @@ export class EmailController {
   }
 
   static async sendReply(req: Request, res: Response) {
-    const { id } = req.params;
-    const tenantId = req.tenantId;
+    const id = req.params.id as string;
+    const tenantId = req.tenantId as string;
     const { body: replyBody } = req.body;
     
     if (!tenantId) {
@@ -144,25 +145,47 @@ export class EmailController {
 
     const email = await prisma.email.findFirst({
       where: { id, tenantId },
+      include: { intelligence: true }
     });
 
     if (!email) {
       return res.status(404).json({ error: 'Email not found' });
     }
 
-    // TODO: Integrate with GmailService to send actual reply
-    // For now, just update the status
-    await prisma.email.update({
-      where: { id },
-      data: { status: 'responded' },
+    const integration = await prisma.integration.findFirst({
+      where: { tenantId, provider: 'gmail', status: 'active' },
     });
 
-    res.json({ status: 'sent', message: 'Reply sent successfully' });
+    if (!integration || !integration.refreshToken) {
+      return res.status(400).json({ error: 'No active Gmail integration found. Please connect your Gmail account.' });
+    }
+
+    try {
+      const gmailService = new GmailService();
+      await gmailService.setTokens(integration.refreshToken);
+      
+      await gmailService.sendReply(
+        email.threadId || email.externalId, 
+        email.from, 
+        email.subject || 'Re: No Subject', 
+        replyBody
+      );
+
+      await prisma.email.update({
+        where: { id },
+        data: { status: 'responded' },
+      });
+
+      res.json({ status: 'sent', message: 'Reply sent successfully' });
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      res.status(500).json({ error: 'Failed to send reply via Gmail' });
+    }
   }
 
   static async assignEmail(req: Request, res: Response) {
-    const { id } = req.params;
-    const tenantId = req.tenantId;
+    const id = req.params.id as string;
+    const tenantId = req.tenantId as string;
     const { userId } = req.body;
     
     if (!tenantId) {

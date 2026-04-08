@@ -3,9 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
-
 import apiRouter from './routes/index';
+import { SyncEngine } from './services/emails/sync-engine';
+import { prisma } from './lib/prisma';
 
 dotenv.config();
 
@@ -31,7 +31,6 @@ function validateEnvironment() {
 validateEnvironment();
 
 const app = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -74,6 +73,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 
 async function gracefulShutdown() {
   console.log('Shutting down gracefully...');
+  SyncEngine.stop();
   await prisma.$disconnect();
   process.exit(0);
 }
@@ -81,8 +81,9 @@ async function gracefulShutdown() {
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 SaaS AI Email Backend running on port ${PORT}`);
+  await SyncEngine.start();
 });
 
 export { prisma };

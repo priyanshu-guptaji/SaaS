@@ -18,9 +18,27 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
 import { EmailListSkeleton, EmailDetailSkeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/hooks/use-toast';
+
+interface Email {
+  id: string;
+  from: string;
+  subject: string;
+  body: string;
+  to: string;
+  receivedAt: string;
+  isRead: boolean;
+  intelligence?: {
+    intent?: string;
+    sentiment?: string;
+    priority?: string;
+    confidence?: number;
+    suggestedReply?: string;
+  };
+}
 
 interface EmailItemProps {
   email: Email;
@@ -86,42 +104,69 @@ const EmailItem = memo(function EmailItem({ email, isSelected, onSelect }: Email
   );
 });
 
-interface Email {
-  id: string;
-  from: string;
-  subject: string;
-  body: string;
-  to: string;
-  receivedAt: string;
-  isRead: boolean;
-  intelligence?: {
-    intent?: string;
-    sentiment?: string;
-    priority?: string;
-    confidence?: number;
-    suggestedReply?: string;
-  };
-}
-
 export default function InboxPage() {
-  const { data: emails = [], isLoading } = useQuery<Email[]>({
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draftBody, setDraftBody] = useState<string>('');
+  
+  const { data: emailsRes = { data: [] }, isLoading } = useQuery<any>({
     queryKey: ['emails'],
     queryFn: async () => {
       const { data } = await apiService.getEmails();
-      return data as Email[];
+      return data;
     },
     staleTime: 30000,
   });
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  
+  const emails = emailsRes.data || [];
+
+  const selectedEmail = useMemo(() => {
+    const email = emails.find((e: Email) => e.id === (selectedId || emails[0]?.id)) || emails[0];
+    return email;
+  }, [emails, selectedId]);
+
+  // Set initial draft body when selected email changes
+  React.useEffect(() => {
+    if (selectedEmail?.intelligence?.suggestedReply) {
+      setDraftBody(selectedEmail.intelligence.suggestedReply);
+    } else {
+      setDraftBody('');
+    }
+  }, [selectedEmail?.id]);
+
+  const replyMutation = useMutation({
+    mutationFn: (body: string) => apiService.sendReply(selectedEmail.id, body),
+    onSuccess: () => {
+      toast({
+        title: "Reply Sent",
+        description: "Your response has been successfully sent via Gmail.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to send reply.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: () => apiService.analyzeEmail(selectedEmail.id),
+    onSuccess: () => {
+      toast({
+        title: "Analysis Triggered",
+        description: "AI is re-analyzing this email...",
+      });
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+    },
+  });
+
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
-  
-  const selectedEmail = useMemo(() => {
-    return emails.find((e) => e.id === (selectedId || emails[0]?.id)) || emails[0];
-  }, [emails, selectedId]);
 
   if (isLoading) {
     return (
@@ -130,6 +175,10 @@ export default function InboxPage() {
         <EmailDetailSkeleton />
       </div>
     );
+  }
+
+  if (!selectedEmail) {
+    return <div className="p-8 text-center text-muted-foreground font-bold text-xl">No emails found.</div>;
   }
 
   return (
@@ -162,11 +211,11 @@ export default function InboxPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {emails.map((email) => (
+            {emails.map((email: Email) => (
                 <EmailItem 
                     key={email.id} 
                     email={email}
-                    isSelected={(selectedId || emails[0]?.id) === email.id}
+                    isSelected={selectedEmail.id === email.id}
                     onSelect={handleSelectEmail}
                 />
             ))}
@@ -245,8 +294,8 @@ export default function InboxPage() {
 
               <h1 className="text-3xl font-extrabold tracking-tight mb-8 underline decoration-primary/20 underline-offset-8 decoration-4">{selectedEmail.subject}</h1>
 
-              <div className="prose prose-slate dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-lg mb-12">
-                  <p>{selectedEmail.body}</p>
+              <div className="prose prose-slate dark:prose-invert max-w-none text-muted-foreground leading-relaxed text-lg mb-12 whitespace-pre-wrap">
+                  {selectedEmail.body}
               </div>
 
               {/* AI Draft Section */}
@@ -269,7 +318,9 @@ export default function InboxPage() {
                   <div className="p-8 rounded-[2rem] border-2 border-primary/20 bg-[var(--gradient-soft)] relative shadow-2xl shadow-indigo-500/5 group-focus-within:border-primary/50 transition-all border-dashed">
                       <textarea 
                           className="w-full bg-transparent border-none outline-none text-muted-foreground leading-relaxed text-lg font-medium min-h-[150px] resize-none selection:bg-primary/20"
-                          defaultValue={selectedEmail.intelligence?.suggestedReply || 'Generating smart reply...'}
+                          value={draftBody}
+                          onChange={(e) => setDraftBody(e.target.value)}
+                          placeholder="Generating smart reply..."
                           spellCheck={false}
                       />
                       
@@ -277,15 +328,28 @@ export default function InboxPage() {
                           <div className="flex items-center gap-3">
                               <button className="p-2 rounded-xl hover:bg-primary/10 text-primary transition-all"><Paperclip className="w-4 h-4" /></button>
                               <button className="p-2 rounded-xl hover:bg-primary/10 text-primary transition-all"><Zap className="w-4 h-4" /></button>
-                              <button className="p-2 rounded-xl hover:bg-primary/10 text-primary transition-all font-bold text-xs uppercase tracking-widest">Regenerate</button>
+                              <button 
+                                onClick={() => analyzeMutation.mutate()}
+                                disabled={analyzeMutation.isPending}
+                                className={cn(
+                                    "p-2 rounded-xl hover:bg-primary/10 text-primary transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50",
+                                    analyzeMutation.isPending && "animate-pulse"
+                                )}
+                              >
+                                {analyzeMutation.isPending ? 'Analyzing...' : 'Regenerate'}
+                              </button>
                           </div>
                           
                           <div className="flex items-center gap-3">
                               <button className="px-6 py-3 rounded-2xl bg-muted text-muted-foreground text-sm font-bold hover:bg-muted/80 transition-all">
                                   Save Draft
                               </button>
-                              <button className="btn-primary !px-8 !py-3 text-sm flex items-center gap-2 group-hover:scale-105 transition-transform duration-300">
-                                  Approve & Send <Send className="w-4 h-4" />
+                              <button 
+                                onClick={() => replyMutation.mutate(draftBody)}
+                                disabled={replyMutation.isPending || !draftBody}
+                                className="btn-primary !px-8 !py-3 text-sm flex items-center gap-2 group-hover:scale-105 transition-transform duration-300 disabled:opacity-50"
+                              >
+                                  {replyMutation.isPending ? 'Sending...' : 'Approve & Send'} <Send className="w-4 h-4" />
                               </button>
                           </div>
                       </div>

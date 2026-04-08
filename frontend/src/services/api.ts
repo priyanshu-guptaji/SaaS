@@ -32,6 +32,7 @@ export const apiService = {
   getEmail: (id: string) => api.get(`/emails/${id}`),
   analyzeEmail: (id: string) => api.post(`/emails/${id}/analyze`),
   updateIntelligence: (id: string, data: IntelligenceData) => api.patch(`/emails/${id}/intelligence`, data),
+  sendReply: (id: string, body: string) => api.post(`/emails/${id}/reply`, { body }),
 
   getSummary: () => api.get('/analytics/summary'),
   getIntents: () => api.get('/analytics/intents'),

@@ -1,6 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { AIService } from '../ai/openai.service';
-import { prisma } from '../../index';
+import { prisma } from '../../lib/prisma';
 import Redis from 'ioredis';
 import dotenv from 'dotenv';
 import { Priority, Sentiment } from '@prisma/client';

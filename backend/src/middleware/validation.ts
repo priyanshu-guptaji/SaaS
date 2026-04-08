@@ -29,13 +29,20 @@ export const emailSendLimiter = rateLimit({
 export const validateRequest = <T extends z.ZodSchema>(schema: T) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+      const dataToValidate = ['GET', 'DELETE'].includes(req.method) ? req.query : req.body;
+      const parsed = schema.parse(dataToValidate);
+      
+      // If it's a GET/DELETE request, merge the parsed values back (handling type coercion)
+      if (['GET', 'DELETE'].includes(req.method) && typeof parsed === 'object' && parsed !== null) {
+        req.query = { ...req.query, ...parsed } as any;
+      }
+      
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           error: 'Validation failed',
-          details: error.errors.map(e => ({
+          details: error.issues.map(e => ({
             field: e.path.join('.'),
             message: e.message,
           })),

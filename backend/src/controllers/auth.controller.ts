@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { GmailService } from '../services/emails/gmail.service';
-import { prisma } from '../index';
+import { prisma } from '../lib/prisma';
 import { google } from 'googleapis';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
