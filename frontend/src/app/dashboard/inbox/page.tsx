@@ -164,6 +164,26 @@ export default function InboxPage() {
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: () => apiService.syncEmails(),
+    onSuccess: () => {
+      toast({
+        title: "Synchronization Started",
+        description: "Inbox syncing in progress...",
+      });
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['emails'] });
+      }, 3000);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Error",
+        description: error.response?.data?.error || "Failed to trigger sync.",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleSelectEmail = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
@@ -188,8 +208,23 @@ export default function InboxPage() {
         <div className="p-6 border-b border-border space-y-4">
             <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold tracking-tight">Inbox</h2>
-                <div className="flex items-center gap-1 bg-muted px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                   <Clock className="w-3 h-3" /> Real-time
+                <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => syncMutation.mutate()}
+                      disabled={syncMutation.isPending}
+                      className={cn(
+                        "p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-all flex items-center justify-center disabled:opacity-50",
+                        syncMutation.isPending && "animate-spin text-primary"
+                      )}
+                      title="Sync Emails"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.228 8H18.5" />
+                      </svg>
+                    </button>
+                    <div className="flex items-center gap-1 bg-muted px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                       <Clock className="w-3 h-3" /> Real-time
+                    </div>
                 </div>
             </div>
             

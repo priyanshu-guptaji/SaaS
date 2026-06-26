@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   ShoppingBag, 
   Mail, 
@@ -10,10 +10,14 @@ import {
   Plus, 
   ChevronRight, 
   ExternalLink,
-  Zap
+  Zap,
+  Trash2,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
+import { useToast } from '@/hooks/use-toast';
 
 const colorMap: Record<string, { bg: string; text: string }> = {
   emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
@@ -23,59 +27,38 @@ const colorMap: Record<string, { bg: string; text: string }> = {
   purple: { bg: 'bg-purple-50', text: 'text-purple-600' },
 };
 
-const apps = [
-  { 
-    name: 'Gmail', 
-    category: 'Communication', 
-    icon: Mail, 
-    color: 'emerald', 
-    connected: false, // Default to false for demo connecting
-    desc: 'Reading and responding to customer emails.'
-  },
-  { 
-    name: 'Shopify', 
-    category: 'E-commerce', 
-    icon: ShoppingBag, 
-    color: 'indigo', 
-    connected: true, 
-    desc: 'Sync order status and customer purchase history.'
-  },
-  { 
-    name: 'HubSpot', 
-    category: 'CRM', 
-    icon: Grid, 
-    color: 'orange', 
-    connected: false, 
-    desc: 'Automatically sync leads and engagement data.'
-  },
-  { 
-    name: 'Slack', 
-    category: 'Notifications', 
-    icon: MessageSquare, 
-    color: 'emerald', 
-    connected: false, 
-    desc: 'Real-time alerts for high-priority emails.'
-  },
-  { 
-    name: 'Zoho CRM', 
-    category: 'CRM', 
-    icon: Grid, 
-    color: 'blue', 
-    connected: false, 
-    desc: 'Sync customer tickets and resolution performance.'
-  },
-  { 
-    name: 'WooCommerce', 
-    category: 'E-commerce', 
-    icon: ShoppingBag, 
-    color: 'purple', 
-    connected: false, 
-    desc: 'Extract shipping and refund details from orders.'
-  }
-];
-
 export default function IntegrationsPage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+
+  // Fetch Integrations
+  const { data: integrations = [], isLoading } = useQuery<any[]>({
+    queryKey: ['integrations'],
+    queryFn: async () => {
+      const { data } = await apiService.getIntegrations();
+      return data;
+    }
+  });
+
+  // Disconnect Integration
+  const disconnectMutation = useMutation({
+    mutationFn: (id: string) => apiService.deleteIntegration(id),
+    onSuccess: () => {
+      toast({
+        title: "Integration Disconnected",
+        description: "Your Gmail account has been unlinked successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['integrations'] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Error",
+        description: err.response?.data?.error || "Failed to disconnect integration.",
+        variant: "destructive",
+      });
+    }
+  });
 
   useEffect(() => {
     if (redirectUrl) {
@@ -83,18 +66,98 @@ export default function IntegrationsPage() {
     }
   }, [redirectUrl]);
 
+  const gmailIntegration = useMemo(() => {
+    return integrations.find(i => i.provider === 'gmail');
+  }, [integrations]);
+
   const handleConnect = async (appName: string) => {
     if (appName === 'Gmail') {
-      const userStr = localStorage.getItem('user');
-      const user = userStr ? JSON.parse(userStr) : null;
-      if (!user) return alert('Please sign in first');
-      
-      const { data } = await apiService.getGoogleAuthUrl(user.tenantId);
-      setRedirectUrl(data.url);
+      if (gmailIntegration) {
+        // Option to disconnect
+        if (confirm("Are you sure you want to disconnect Gmail? This will stop email synchronization.")) {
+          disconnectMutation.mutate(gmailIntegration.id);
+        }
+      } else {
+        const userStr = localStorage.getItem('user');
+        const user = userStr ? JSON.parse(userStr) : null;
+        if (!user) return alert('Please sign in first');
+        
+        try {
+          const { data } = await apiService.getGoogleAuthUrl(user.tenantId);
+          setRedirectUrl(data.url);
+        } catch (err) {
+          console.error(err);
+          alert('Failed to get Google authentication URL');
+        }
+      }
     } else {
       alert(`Integration with ${appName} is coming soon in the Professional tier!`);
     }
   };
+
+  const apps = useMemo(() => [
+    { 
+      name: 'Gmail', 
+      category: 'Communication', 
+      icon: Mail, 
+      color: 'emerald', 
+      connected: !!gmailIntegration, 
+      desc: gmailIntegration 
+        ? `Connected to: ${gmailIntegration.emailAddress || 'active'}`
+        : 'Reading and responding to customer emails.'
+    },
+    { 
+      name: 'Shopify', 
+      category: 'E-commerce', 
+      icon: ShoppingBag, 
+      color: 'indigo', 
+      connected: false, 
+      desc: 'Sync order status and customer purchase history.'
+    },
+    { 
+      name: 'HubSpot', 
+      category: 'CRM', 
+      icon: Grid, 
+      color: 'orange', 
+      connected: false, 
+      desc: 'Automatically sync leads and engagement data.'
+    },
+    { 
+      name: 'Slack', 
+      category: 'Notifications', 
+      icon: MessageSquare, 
+      color: 'emerald', 
+      connected: false, 
+      desc: 'Real-time alerts for high-priority emails.'
+    },
+    { 
+      name: 'Zoho CRM', 
+      category: 'CRM', 
+      icon: Grid, 
+      color: 'blue', 
+      connected: false, 
+      desc: 'Sync customer tickets and resolution performance.'
+    },
+    { 
+      name: 'WooCommerce', 
+      category: 'E-commerce', 
+      icon: ShoppingBag, 
+      color: 'purple', 
+      connected: false, 
+      desc: 'Extract shipping and refund details from orders.'
+    }
+  ], [gmailIntegration]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[calc(100vh-80px)] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground font-bold">Loading Integrations...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 bg-slate-50 dark:bg-slate-950/50 h-full overflow-y-auto">
@@ -103,7 +166,7 @@ export default function IntegrationsPage() {
               <h1 className="text-3xl font-extrabold tracking-tight underline decoration-primary/20 underline-offset-8">Integrations Marketplace</h1>
               <p className="text-muted-foreground mt-1.5 font-medium">Connect your favorite business tools to boost AI intelligence.</p>
           </div>
-          <button className="px-5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-border text-sm font-bold flex items-center gap-2 hover:border-primary/30 transition-all">
+          <button className="px-5 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-border text-sm font-bold flex items-center gap-2 hover:border-primary/30 transition-all font-semibold">
               Request Connector <ExternalLink className="w-4 h-4" />
           </button>
       </div>
@@ -112,7 +175,7 @@ export default function IntegrationsPage() {
           {apps.map((app, i) => (
              <div key={i} className={cn(
                "p-8 rounded-[2rem] border bg-white dark:bg-slate-950 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group overflow-hidden relative",
-               app.connected ? "border-primary/30" : "border-border"
+               app.connected ? "border-emerald-500/30 ring-2 ring-emerald-500/10" : "border-border"
              )}>
                  {app.connected && (
                     <div className="absolute -top-1 -right-1 bg-emerald-500 text-white p-2 rounded-bl-3xl shadow-lg">
@@ -124,26 +187,43 @@ export default function IntegrationsPage() {
                       <app.icon className="w-7 h-7" />
                   </div>
                  
-                 <div className="font-bold text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">{app.category}</div>
-                 <h3 className="text-2xl font-extrabold tracking-tight mb-3 group-hover:text-primary transition-colors">{app.name}</h3>
-                 <p className="text-sm text-muted-foreground font-medium mb-8 leading-relaxed">
-                     {app.desc}
-                 </p>
+                  <div className="font-bold text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">{app.category}</div>
+                  <h3 className="text-2xl font-extrabold tracking-tight mb-3 group-hover:text-primary transition-colors">{app.name}</h3>
+                  <p className="text-sm text-muted-foreground font-medium mb-8 leading-relaxed">
+                      {app.desc}
+                  </p>
 
-                 <div className="flex items-center justify-between pt-6 border-t border-border/60">
-                     <div className="flex items-center gap-2">
-                        <div className={cn("w-2 h-2 rounded-full", app.connected ? "bg-emerald-500" : "bg-slate-300")} />
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">{app.connected ? 'Connected' : 'Disconnected'}</span>
-                     </div>
-                     <button 
-                        onClick={() => handleConnect(app.name)}
-                        className={cn(
-                        "px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
-                        app.connected ? "bg-muted text-muted-foreground hover:bg-muted/80" : "bg-primary text-white shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95"
-                     )}>
-                        {app.connected ? 'Configuration' : <><Plus className="w-4 h-4" /> Connect App</>}
-                     </button>
-                 </div>
+                  <div className="flex items-center justify-between pt-6 border-t border-border/60">
+                      <div className="flex items-center gap-2">
+                         <div className={cn("w-2 h-2 rounded-full", app.connected ? "bg-emerald-500 animate-pulse" : "bg-slate-300")} />
+                         <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest font-semibold">{app.connected ? 'Connected' : 'Disconnected'}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5">
+                        {app.connected && app.name === 'Gmail' && (
+                          <button 
+                            onClick={() => {
+                              if (confirm("Disconnect Gmail?")) disconnectMutation.mutate(gmailIntegration!.id);
+                            }}
+                            className="p-2 rounded-xl bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all"
+                            title="Disconnect"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button 
+                           onClick={() => handleConnect(app.name)}
+                           disabled={disconnectMutation.isPending && app.name === 'Gmail'}
+                           className={cn(
+                           "px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                           app.connected 
+                             ? "bg-muted text-muted-foreground hover:bg-muted/80" 
+                             : "bg-primary text-white shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95"
+                        )}>
+                           {app.connected ? 'Connected' : <><Plus className="w-4 h-4" /> Connect App</>}
+                        </button>
+                      </div>
+                  </div>
              </div>
           ))}
       </div>

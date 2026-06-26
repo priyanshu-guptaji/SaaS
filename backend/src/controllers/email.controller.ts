@@ -208,4 +208,24 @@ export class EmailController {
 
     res.json({ status: 'assigned', data: updated });
   }
+
+  static async triggerSync(req: Request, res: Response) {
+    const tenantId = req.tenantId as string;
+    
+    if (!tenantId) {
+      return res.status(403).json({ error: 'Tenant ID required' });
+    }
+
+    try {
+      const { SyncEngine } = require('../services/emails/sync-engine');
+      SyncEngine.syncTenant(tenantId).catch((err: any) => {
+        console.error(`Manual sync task failed for tenant ${tenantId}:`, err);
+      });
+
+      res.json({ status: 'started', message: 'Synchronization process triggered' });
+    } catch (error) {
+      console.error('Error triggering sync:', error);
+      res.status(500).json({ error: 'Failed to start sync' });
+    }
+  }
 }

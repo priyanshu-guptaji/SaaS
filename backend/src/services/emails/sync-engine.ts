@@ -28,6 +28,21 @@ export class SyncEngine {
     }
   }
 
+  static async syncTenant(tenantId: string) {
+    console.log(`Manual sync triggered for tenant ${tenantId}`);
+    try {
+      const integrations = await prisma.integration.findMany({
+        where: { tenantId, provider: 'gmail', status: 'active' },
+      });
+
+      for (const integration of integrations) {
+        await this.syncIntegration(integration);
+      }
+    } catch (error) {
+      console.error(`Error syncing tenant ${tenantId}:`, error);
+    }
+  }
+
   private static async syncAllTenants() {
     console.log('🔄 Syncing emails for all active integrations...');
     

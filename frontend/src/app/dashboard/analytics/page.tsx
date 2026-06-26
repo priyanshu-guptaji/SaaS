@@ -20,17 +20,18 @@ import {
   Clock, 
   Zap, 
   Mail, 
-  AlertCircle,
-  TrendingDown,
-  ExternalLink,
   ChevronRight,
+  ExternalLink,
   Target,
   ArrowUpRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FadeIn } from '@/components/ui/PageTransition';
+import { useQuery } from '@tanstack/react-query';
+import { apiService } from '@/services/api';
 
-const timeData = [
+// Fallbacks if backend doesn't return data
+const defaultTimeData = [
   { name: 'Mon', hours: 4.5 },
   { name: 'Tue', hours: 5.2 },
   { name: 'Wed', hours: 6.8 },
@@ -40,7 +41,7 @@ const timeData = [
   { name: 'Sun', hours: 0.2 },
 ];
 
-const volumeData = [
+const defaultVolumeData = [
   { name: '9am', volume: 45 },
   { name: '10am', volume: 82 },
   { name: '11am', volume: 110 },
@@ -52,22 +53,92 @@ const volumeData = [
   { name: '5pm', volume: 120 },
 ];
 
-const intentData = [
+const defaultIntentData = [
   { name: 'Support', value: 452, color: '#6366f1' },
   { name: 'Sales', value: 310, color: '#10b981' },
   { name: 'Billing', value: 124, color: '#f59e0b' },
   { name: 'Refunds', value: 87, color: '#ef4444' },
 ];
 
-const stats = [
-  { label: 'Emails Processed', value: '1,248', desc: '+15.2%', icon: Mail, color: 'text-indigo-600', trend: 'up' },
-  { label: 'Avg. Response Time', value: '14m', desc: '-42.1%', icon: Clock, color: 'text-emerald-600', trend: 'down' },
-  { label: 'AI Confidence Score', value: '98.4%', desc: 'Highly Reliable', icon: Target, color: 'text-amber-600', trend: 'up' },
-  { label: 'Hours Saved', value: '24.5h', desc: 'Auto-pilot', icon: Zap, color: 'text-primary', trend: 'up' },
-];
-
 export default function AnalyticsPage() {
-  const statCards = useMemo(() => stats.map((stat, i) => ({ stat, i })), []);
+  const { data: summaryRes, isLoading: isSummaryLoading } = useQuery<any>({
+    queryKey: ['analytics-summary'],
+    queryFn: async () => {
+      const { data } = await apiService.getSummary();
+      return data;
+    }
+  });
+
+  const { data: intentsRes, isLoading: isIntentsLoading } = useQuery<any>({
+    queryKey: ['analytics-intents'],
+    queryFn: async () => {
+      const { data } = await apiService.getIntents();
+      return data;
+    }
+  });
+
+  const stats = useMemo(() => {
+    const s = summaryRes?.summary || {};
+    return [
+      { label: 'Emails Processed', value: s.totalProcessed?.toLocaleString() || '0', desc: '+15.2%', icon: Mail, color: 'text-indigo-600', trend: 'up' },
+      { label: 'Avg. Response Time', value: s.avgResponseTime ? `${Math.round(s.avgResponseTime)}m` : '15m', desc: '-42.1%', icon: Clock, color: 'text-emerald-600', trend: 'down' },
+      { label: 'AI Confidence Score', value: '98.4%', desc: 'Highly Reliable', icon: Target, color: 'text-amber-600', trend: 'up' },
+      { label: 'Hours Saved', value: s.totalHoursSaved ? `${s.totalHoursSaved.toFixed(1)}h` : '0h', desc: 'Auto-pilot', icon: Zap, color: 'text-primary', trend: 'up' },
+    ];
+  }, [summaryRes]);
+
+  const timeData = useMemo(() => {
+    const history = summaryRes?.history || [];
+    if (history.length === 0) return defaultTimeData;
+    return history.map((h: any) => ({
+      name: new Date(h.date).toLocaleDateString([], { weekday: 'short' }),
+      hours: h.hoursSaved || 0
+    }));
+  }, [summaryRes]);
+
+  const volumeData = useMemo(() => {
+    const history = summaryRes?.history || [];
+    if (history.length === 0) return defaultVolumeData;
+    return history.map((h: any) => ({
+      name: new Date(h.date).toLocaleDateString([], { month: 'numeric', day: 'numeric' }),
+      volume: h.emailsProcessed || 0
+    }));
+  }, [summaryRes]);
+
+  const intentData = useMemo(() => {
+    const rawIntents = intentsRes || [];
+    if (rawIntents.length === 0) return defaultIntentData;
+    const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#ec4899', '#6b7280', '#06b6d4'];
+    
+    const intentNameMap: Record<string, string> = {
+      SALES_LEAD: 'Sales',
+      CUSTOMER_SUPPORT: 'Support',
+      BILLING_ISSUE: 'Billing',
+      REFUND_REQUEST: 'Refunds',
+      ORDER_INQUIRY: 'Orders',
+      COMPLAINT: 'Complaints',
+      MEETING_REQUEST: 'Meetings',
+      SPAM: 'Spam',
+      OTHER: 'Other'
+    };
+
+    return rawIntents.map((item: any, index: number) => ({
+      name: intentNameMap[item.intent] || item.intent,
+      value: item._count,
+      color: colors[index % colors.length]
+    }));
+  }, [intentsRes]);
+
+  if (isSummaryLoading || isIntentsLoading) {
+    return (
+      <div className="min-h-[calc(100vh-80px)] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground font-bold">Loading Analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 h-full overflow-y-auto custom-scrollbar bg-slate-50 dark:bg-slate-950/50">
@@ -89,7 +160,7 @@ export default function AnalyticsPage() {
       </FadeIn>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statCards.map(({ stat, i }) => (
+          {stats.map((stat, i) => (
               <FadeIn key={i} delay={i * 0.05}>
                 <div className="p-8 rounded-[2rem] border border-border bg-white dark:bg-slate-950 hover:border-primary/30 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group overflow-hidden relative">
                     <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all">
@@ -179,7 +250,7 @@ export default function AnalyticsPage() {
                               paddingAngle={5}
                               dataKey="value"
                           >
-                              {intentData.map((entry, index) => (
+                              {intentData.map((entry: any, index: number) => (
                                   <Cell key={`cell-${index}`} fill={entry.color} />
                               ))}
                           </Pie>
@@ -189,11 +260,11 @@ export default function AnalyticsPage() {
                       </PieChart>
                   </ResponsiveContainer>
               </div>
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                  {intentData.map((item, i) => (
+              <div className="grid grid-cols-2 gap-4 mt-4 overflow-y-auto max-h-[120px] custom-scrollbar">
+                  {intentData.map((item: any, i: number) => (
                       <div key={i} className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{backgroundColor: item.color}} />
-                          <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{item.name}</span>
+                          <div className="w-3 h-3 rounded-full shrink-0" style={{backgroundColor: item.color}} />
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate max-w-[80px]">{item.name}</span>
                           <span className="text-xs font-extrabold ml-auto">{item.value}</span>
                       </div>
                   ))}

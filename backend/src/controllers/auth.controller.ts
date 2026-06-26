@@ -99,7 +99,7 @@ export class AuthController {
   }
 
   static async getGoogleAuthUrl(req: Request, res: Response) {
-    const tenantId = req.headers['x-tenant-id'] as string;
+    const tenantId = req.tenantId as string;
     
     if (!tenantId) {
       return res.status(403).json({ error: 'Tenant ID required' });

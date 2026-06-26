@@ -1,9 +1,9 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { AIService } from '../ai/openai.service';
+import { WorkflowEngine } from '../workflows/workflow-engine';
 import { prisma } from '../../lib/prisma';
 import Redis from 'ioredis';
 import dotenv from 'dotenv';
-import { Priority, Sentiment } from '@prisma/client';
 
 dotenv.config();
 
@@ -72,6 +72,13 @@ export const emailWorker = new Worker('EmailProcessor', async (job: Job) => {
     });
 
     console.log(`Successfully analyzed email: ${emailId}`);
+
+    // Trigger workflows for the analyzed email
+    try {
+      await WorkflowEngine.execute(emailId, tenantId, analysis);
+    } catch (workflowErr) {
+      console.error(`Workflow execution error for email ${emailId}:`, workflowErr);
+    }
 
   } catch (error) {
     console.error(`Error processing job ${job.id}:`, error);
